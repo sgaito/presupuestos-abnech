@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gestión de instructivos</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <style>
+        /* Tabla instructivos: encaje en pantalla y columna Contenido limitada */
+        #instructivos-table { table-layout: fixed; width: 100%; }
+        .instructivo-th-obra { width: 18%; }
+        .instructivo-th-contenido { width: 32%; max-width: 220px; }
+        .instructivo-th-contacto { width: 28%; }
+        .instructivo-th-accion { width: auto; min-width: 90px; }
+        .instructivo-td-contenido { max-width: 0; overflow: hidden; }
+        .instructivo-preview { max-width: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: #64748b; }
+        .admin-table-wrap.instructivos-table-wrap { overflow-x: auto; max-width: 100%; }
+        .admin-modal-content-instructivo { max-width: 680px; }
+        .admin-form-group textarea { min-height: 80px; resize: vertical; width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: inherit; font-size: 14px; box-sizing: border-box; }
+        .admin-form-group textarea.contenido-tall { min-height: 140px; }
+        /* Quill: contenedor y aspecto estable (estilo Word) */
+        .quill-instructivo-wrap {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .quill-instructivo-wrap .ql-toolbar.ql-snow {
+            border: none;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 10px 12px;
+            background: #f8fafc;
+        }
+        .quill-instructivo-wrap .ql-container.ql-snow {
+            border: none;
+            font-family: inherit;
+        }
+        .quill-instructivo-wrap .ql-editor {
+            min-height: 380px;
+            max-height: 520px;
+            font-size: 15px;
+            line-height: 1.6;
+            color: #333;
+            padding: 14px 16px;
+        }
+        .quill-instructivo-wrap .ql-editor strong,
+        .quill-instructivo-wrap .ql-editor b {
+            font-weight: 700 !important;
+            color: #000 !important;
+        }
+        .quill-instructivo-wrap .ql-editor.ql-blank::before {
+            color: #94a3b8;
+            font-style: normal;
+        }
+        .quill-instructivo-wrap .ql-editor p,
+        .quill-instructivo-wrap .ql-editor li {
+            font-size: 15px;
+            color: #333;
+        }
+        .quill-instructivo-wrap .ql-editor h2 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #000;
+            margin: 1em 0 0.5em;
+        }
+        .quill-instructivo-wrap .ql-editor h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #111;
+            margin: 0.85em 0 0.4em;
+        }
+        .quill-instructivo-wrap .ql-snow .ql-stroke {
+            stroke: #cbd5e1;
+        }
+        .quill-instructivo-wrap .ql-snow .ql-fill {
+            fill: #64748b;
+        }
+        .quill-instructivo-wrap .ql-snow .ql-picker {
+            color: #475569;
+        }
+        .quill-instructivo-wrap .ql-snow button:hover .ql-stroke {
+            stroke: #2563eb;
+        }
+        .quill-instructivo-wrap .ql-snow button:hover .ql-fill {
+            fill: #2563eb;
+        }
+        .quill-instructivo-wrap .ql-snow button.ql-active .ql-stroke {
+            stroke: #2563eb;
+        }
+        .quill-instructivo-wrap .ql-snow button.ql-active .ql-fill {
+            fill: #2563eb;
+        }
+    </style>
+</head>
+<body class="admin-page">
+    <header class="admin-header">
+        <div class="admin-header-inner">
+            <div class="admin-header-user"><strong>Usuario:</strong> {{ current_user }}</div>
+            <nav class="admin-header-nav">
+                <a href="{{ url_for('presupuestos') }}" class="calc">Calculadora</a>
+                <a href="{{ url_for('aranceles') }}" class="aranceles">Aranceles</a>
+                <a href="{{ url_for('instructivo') }}" class="instructivo nav-active">Instructivo</a>
+                <a href="{{ url_for('admin_usuarios') }}" class="usuarios">Panel</a>
+                <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesión</a>
+            </nav>
+        </div>
+    </header>
+
+    <section class="admin-section-wrap">
+        <div class="admin-container">
+            <h1>Gestión de instructivos</h1>
+            <p class="admin-card-desc">Modificá la información de cada obra social para el instructivo: contenido, dirección, teléfonos y observaciones.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="admin-alert admin-alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="admin-card">
+                <div class="admin-filters" style="margin-bottom: 12px;">
+                    <input type="text" id="search-instructivo" placeholder="Buscar por obra social..." class="admin-input" style="max-width: 320px;" onkeyup="filterInstructivos()">
+                </div>
+                {% if instructivos %}
+                <div class="admin-table-wrap instructivos-table-wrap">
+                    <table class="admin-table" id="instructivos-table">
+                        <thead>
+                            <tr>
+                                <th class="instructivo-th-obra">Obra social</th>
+                                <th class="instructivo-th-contenido">Contenido</th>
+                                <th class="instructivo-th-contacto">Contacto / Tel.</th>
+                                <th class="instructivo-th-accion">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for inv in instructivos %}
+                            <tr data-nombre="{{ (inv.nombre or '')|lower }}">
+                                <td><strong>{{ inv.nombre }}</strong></td>
+                                <td class="instructivo-td-contenido"><div class="instructivo-preview" title="{{ (inv.contenido or '')|strip_html }}">{{ (inv.contenido or '')|strip_html or '—' }}</div></td>
+                                <td><div class="instructivo-preview" title="{{ (inv.contacto or '') + ' ' + (inv.telefonos or '') }}">{{ inv.contacto or '—' }}{% if inv.telefonos %} · {{ inv.telefonos }}{% endif %}</div></td>
+                                <td>
+                                    <button type="button" class="admin-btn admin-btn-secondary btn-editar-instructivo" data-nombre="{{ inv.nombre }}" data-contenido="{{ (inv.contenido or '')|e }}" data-contacto="{{ inv.contacto or '' }}" data-telefonos="{{ inv.telefonos or '' }}" data-notas="{{ inv.notas_especiales or '' }}">Editar</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="admin-no-data">
+                    <p>No hay instructivos cargados.</p>
+                    <p style="font-size: 13px;">Agregá entradas en <code>instructivos.json</code> para gestionarlos desde acá.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <div id="modal-editar-instructivo" class="admin-modal" role="dialog">
+        <div class="admin-modal-content admin-modal-content-instructivo">
+            <div class="admin-modal-header">
+                <h2 id="modal-instructivo-titulo">Editar instructivo</h2>
+            </div>
+            <div class="admin-modal-body">
+                <input type="hidden" id="modal-instructivo-nombre" value="">
+                <div class="admin-form-group">
+                    <label>Obra social</label>
+                    <p id="modal-instructivo-nombre-display" style="margin:0; font-weight:600; color:#1e293b;"></p>
+                </div>
+                <div class="admin-form-group">
+                    <label for="quill-instructivo-editor">Contenido</label>
+                    <div class="quill-instructivo-wrap">
+                        <div id="quill-instructivo-editor" data-placeholder="Texto principal del instructivo..."></div>
+                    </div>
+                </div>
+                <div class="admin-form-group">
+                    <label for="modal-instructivo-contacto">Dirección / Contacto</label>
+                    <input type="text" id="modal-instructivo-contacto" class="admin-input" placeholder="Ej: Av. Corrientes 1234">
+                </div>
+                <div class="admin-form-group">
+                    <label for="modal-instructivo-telefonos">Teléfonos</label>
+                    <input type="text" id="modal-instructivo-telefonos" class="admin-input" placeholder="Ej: (011) 1234-5678">
+                </div>
+                <div class="admin-form-group">
+                    <label for="modal-instructivo-notas">Observaciones</label>
+                    <textarea id="modal-instructivo-notas" placeholder="Observaciones..."></textarea>
+                </div>
+                <div id="modal-instructivo-mensaje" class="admin-alert" style="display:none; margin-top:12px;"></div>
+            </div>
+            <div class="admin-modal-actions">
+                <button type="button" id="modal-instructivo-cerrar" class="admin-btn admin-btn-secondary">Cerrar</button>
+                <button type="button" id="modal-instructivo-guardar" class="admin-btn admin-btn-primary">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    <script>
+        (function() {
+            var modal = document.getElementById('modal-editar-instructivo');
+            var nombreDisplay = document.getElementById('modal-instructivo-nombre-display');
+            var nombreHidden = document.getElementById('modal-instructivo-nombre');
+            var contacto = document.getElementById('modal-instructivo-contacto');
+            var telefonos = document.getElementById('modal-instructivo-telefonos');
+            var notas = document.getElementById('modal-instructivo-notas');
+            var mensaje = document.getElementById('modal-instructivo-mensaje');
+            var btnGuardar = document.getElementById('modal-instructivo-guardar');
+            var btnCerrar = document.getElementById('modal-instructivo-cerrar');
+
+            var quillContainer = document.getElementById('quill-instructivo-editor');
+            var placeholder = quillContainer.getAttribute('data-placeholder') || 'Texto principal del instructivo...';
+
+            var quill = new Quill('#quill-instructivo-editor', {
+                theme: 'snow',
+                placeholder: placeholder,
+                modules: {
+                    toolbar: [
+                        ['bold', 'italic', 'underline'],
+                        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                        ['link'],
+                        [{ 'header': [2, 3, false] }]
+                    ]
+                }
+            });
+
+            function showMsg(text, isError) {
+                mensaje.textContent = text;
+                mensaje.className = 'admin-alert ' + (isError ? 'admin-alert-error' : 'admin-alert-success');
+                mensaje.style.display = 'block';
+            }
+            function hideMsg() { mensaje.style.display = 'none'; }
+
+            function stripHtml(html) {
+                if (!html) return '—';
+                var el = document.createElement('div');
+                el.innerHTML = html;
+                return (el.textContent || el.innerText || '').trim() || '—';
+            }
+
+            function decodeHtmlAttr(attrValue) {
+                if (!attrValue) return '';
+                var txt = document.createElement('textarea');
+                txt.innerHTML = attrValue;
+                return txt.value;
+            }
+
+            function getEditorHtml() {
+                var root = quill.root;
+                return root.innerHTML || '';
+            }
+
+            function setEditorHtml(html) {
+                html = (html || '').trim();
+                quill.clipboard.dangerouslyPasteHTML(html, 'api');
+            }
+
+            document.querySelectorAll('.btn-editar-instructivo').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var n = this.getAttribute('data-nombre');
+                    nombreHidden.value = n;
+                    nombreDisplay.textContent = n;
+                    var rawContenido = this.getAttribute('data-contenido');
+                    setEditorHtml(decodeHtmlAttr(rawContenido || ''));
+                    contacto.value = this.getAttribute('data-contacto') || '';
+                    telefonos.value = this.getAttribute('data-telefonos') || '';
+                    notas.value = this.getAttribute('data-notas') || '';
+                    hideMsg();
+                    modal.classList.add('show');
+                    quill.focus();
+                });
+            });
+
+            btnCerrar.addEventListener('click', function() { modal.classList.remove('show'); });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && modal.classList.contains('show')) {
+                    modal.classList.remove('show');
+                }
+                if (e.key === 'Enter' && modal.classList.contains('show')) {
+                    var active = document.activeElement;
+                    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+                    if (active && active.closest && active.closest('.quill-instructivo-wrap')) return;
+                    e.preventDefault();
+                    btnGuardar.click();
+                }
+            });
+
+            btnGuardar.addEventListener('click', function() {
+                var nombre = nombreHidden.value.trim();
+                if (!nombre) return;
+                hideMsg();
+                btnGuardar.disabled = true;
+                var htmlContenido = getEditorHtml();
+                var formData = new FormData();
+                formData.append('nombre', nombre);
+                formData.append('contenido', htmlContenido);
+                formData.append('contacto', contacto.value);
+                formData.append('telefonos', telefonos.value);
+                formData.append('notas_especiales', notas.value);
+                formData.append('csrf_token', '{{ csrf_token() }}');
+                fetch('{{ url_for("admin_instructivos_actualizar") }}', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+                .then(function(result) {
+                    btnGuardar.disabled = false;
+                    if (result.ok && result.data.success) {
+                        showMsg(result.data.message || 'Guardado correctamente.', false);
+                        modal.classList.remove('show');
+                        var row = document.querySelector('tr[data-nombre="' + nombre.toLowerCase().replace(/"/g, '\\"') + '"]');
+                        if (row) {
+                            var previews = row.querySelectorAll('.instructivo-preview');
+                            if (previews[0]) { previews[0].textContent = stripHtml(htmlContenido); previews[0].title = stripHtml(htmlContenido); }
+                            if (previews[1]) { var ct = contacto.value + (telefonos.value ? ' · ' + telefonos.value : ''); previews[1].textContent = ct || '—'; previews[1].title = ct; }
+                            var btn = row.querySelector('.btn-editar-instructivo');
+                            if (btn) {
+                                btn.setAttribute('data-contenido', htmlContenido);
+                                btn.setAttribute('data-contacto', contacto.value);
+                                btn.setAttribute('data-telefonos', telefonos.value);
+                                btn.setAttribute('data-notas', notas.value);
+                            }
+                        }
+                    } else {
+                        showMsg(result.data.message || 'Error al guardar.', true);
+                    }
+                })
+                .catch(function() {
+                    btnGuardar.disabled = false;
+                    showMsg('Error de conexión.', true);
+                });
+            });
+        })();
+
+        function filterInstructivos() {
+            var q = (document.getElementById('search-instructivo').value || '').toLowerCase();
+            var rows = document.querySelectorAll('#instructivos-table tbody tr');
+            rows.forEach(function(row) {
+                var nombre = (row.getAttribute('data-nombre') || '').toLowerCase();
+                row.style.display = nombre.indexOf(q) !== -1 ? '' : 'none';
+            });
+        }
+    </script>
+</body>
+</html>

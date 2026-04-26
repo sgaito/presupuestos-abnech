@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Panel Administrativo</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body class="admin-page">
+    <header class="admin-header">
+        <div class="admin-header-inner">
+            <div class="admin-header-user"><strong>Usuario:</strong> {{ current_user }}</div>
+            <nav class="admin-header-nav">
+                <a href="{{ url_for('presupuestos') }}" class="calc">Calculadora</a>
+                <a href="{{ url_for('aranceles') }}" class="aranceles">Aranceles</a>
+                <a href="{{ url_for('instructivo') }}" class="instructivo">Instructivo</a>
+                <a href="{{ url_for('admin_usuarios') }}" class="usuarios nav-active">Panel</a>
+                <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesión</a>
+            </nav>
+        </div>
+    </header>
+
+    <section class="admin-section-wrap">
+        <div class="admin-container">
+            <h1>Panel Administrativo</h1>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="admin-alert admin-alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="admin-card">
+                <h2>Gestión de Aranceles</h2>
+                <p class="admin-card-desc">Modificá precios, estado y cobertura de anexo por obra social. Podés aplicar cambios de inmediato o programarlos para una fecha futura.</p>
+                <a href="{{ url_for('admin_obras') }}" class="admin-btn admin-btn-primary">Ir a Gestión de Aranceles</a>
+            </div>
+
+            <div class="admin-card">
+                <h2>Instructivo de obras sociales</h2>
+                <p class="admin-card-desc">Editá por obra social el contenido del instructivo: texto, dirección, teléfonos y observaciones.</p>
+                <a href="{{ url_for('admin_instructivos') }}" class="admin-btn admin-btn-primary">Editar instructivos</a>
+            </div>
+
+            {% if current_user == 'Gaito' and daniel_log_lines is defined %}
+            <div class="admin-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <h2 style="margin:0;">Log Daniel</h2>
+                    <button type="button" id="btn-vaciar-log-daniel" class="admin-btn admin-btn-secondary admin-btn-sm" title="Vaciar el registro">Vaciar log</button>
+                </div>
+                <pre id="log-daniel-content" style="margin:0; font-size:0.85rem; max-height:200px; overflow:auto;">{% for line in daniel_log_lines %}{{ line }}{{ '\n' }}{% endfor %}{% if not daniel_log_lines %}— vacío —{% endif %}</pre>
+            </div>
+            {% endif %}
+
+            <div class="admin-card">
+                <h2>Agregar nuevo usuario</h2>
+                <p class="admin-card-desc">Crea un nuevo usuario para acceder al sistema.</p>
+                <form method="POST" action="{{ url_for('admin_usuarios') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="action" value="agregar"/>
+                    <div class="admin-form-row">
+                        <div class="admin-form-group">
+                            <label>Usuario</label>
+                            <input type="text" name="username" required>
+                        </div>
+                        <div class="admin-form-group">
+                            <label>Contraseña</label>
+                            <input type="password" name="password" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="admin-btn admin-btn-primary">Agregar Usuario</button>
+                </form>
+            </div>
+
+            <div class="admin-card">
+                <h2>Usuarios habilitados</h2>
+                <div class="admin-table-wrap">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for username, user_data in users.items() %}
+                            <tr>
+                                <td><strong>{{ username }}</strong>{% if username == current_user %} (Tú){% endif %}</td>
+                                <td>
+                                    {% if user_data.get('habilitado', False) %}
+                                        <span class="admin-badge admin-badge-ok">Habilitado</span>
+                                    {% else %}
+                                        <span class="admin-badge admin-badge-off">Deshabilitado</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="admin-actions">
+                                        {% if username != 'Gaito' and username != '3' and username != 'DanielABNECH' %}
+                                        <a href="{{ url_for('admin_perfil', username=username) }}" class="admin-btn admin-btn-secondary admin-btn-sm">Perfil PDF</a>
+                                        {% if user_data.get('habilitado', False) %}
+                                            <form method="POST" action="{{ url_for('admin_usuarios') }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <input type="hidden" name="action" value="deshabilitar"/>
+                                                <input type="hidden" name="username" value="{{ username }}"/>
+                                                <button type="submit" class="admin-btn admin-btn-warning admin-btn-sm">Deshabilitar</button>
+                                            </form>
+                                        {% else %}
+                                            <form method="POST" action="{{ url_for('admin_usuarios') }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <input type="hidden" name="action" value="habilitar"/>
+                                                <input type="hidden" name="username" value="{{ username }}"/>
+                                                <button type="submit" class="admin-btn admin-btn-success admin-btn-sm">Habilitar</button>
+                                            </form>
+                                        {% endif %}
+                                        <form method="POST" action="{{ url_for('admin_usuarios') }}" onsubmit="return confirm('¿Estás seguro de eliminar este usuario?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <input type="hidden" name="action" value="eliminar"/>
+                                            <input type="hidden" name="username" value="{{ username }}"/>
+                                            <button type="submit" class="admin-btn admin-btn-danger admin-btn-sm">Eliminar</button>
+                                        </form>
+                                        {% else %}
+                                        <span class="admin-muted">Cuenta de administrador</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        var btnVaciarLog = document.getElementById('btn-vaciar-log-daniel');
+        if (btnVaciarLog) {
+            btnVaciarLog.addEventListener('click', function() {
+                if (!confirm('¿Vaciar el log de Daniel? Se borrará todo el registro.')) return;
+                fetch('{{ url_for("admin_daniel_log_clear") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'csrf_token={{ csrf_token() }}'
+                }).then(function(r) { return r.json(); }).then(function(d) {
+                    if (d.success) {
+                        var pre = document.getElementById('log-daniel-content');
+                        if (pre) pre.textContent = '— vacío —';
+                    } else alert('Error: ' + (d.message || 'No se pudo vaciar'));
+                }).catch(function() { alert('Error de conexión'); });
+            });
+        }
+        (function logDanielLive() {
+            var pre = document.getElementById('log-daniel-content');
+            if (!pre) return;
+            function updateLog() {
+                fetch('{{ url_for("admin_daniel_log_content") }}')
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        if (!d.success) return;
+                        var atBottom = pre.scrollHeight - pre.scrollTop <= pre.clientHeight + 2;
+                        pre.textContent = d.lines && d.lines.length ? d.lines.join('\n') + '\n' : '— vacío —';
+                        if (atBottom) pre.scrollTop = pre.scrollHeight;
+                    })
+                    .catch(function() {});
+            }
+            setInterval(updateLog, 4000);
+        })();
+    </script>
+</body>
+</html>

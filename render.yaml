@@ -1,0 +1,13 @@
+# Configuración para Render
+# Este archivo es opcional, pero facilita el deployment
+
+services:
+  - type: web
+    name: laboratorio-presupuestos
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SECRET_KEY
+        sync: false  # Necesitás configurarlo manualmente en el dashboard de Render
+

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Aranceles</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body class="admin-page">
+    <header class="admin-header">
+        <div class="admin-header-inner">
+            <div class="admin-header-user"><strong>Usuario:</strong> {{ current_user }}</div>
+            <nav class="admin-header-nav">
+                <a href="{{ url_for('presupuestos') }}" class="calc">Calculadora</a>
+                <a href="{{ url_for('aranceles') }}" class="aranceles nav-active">Aranceles</a>
+                <a href="{{ url_for('instructivo') }}" class="instructivo">Instructivo</a>
+                {% if current_user == 'Gaito' or current_user == '3' or current_user == 'DanielABNECH' %}
+                <a href="{{ url_for('admin_usuarios') }}" class="usuarios">Panel</a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesión</a>
+            </nav>
+        </div>
+    </header>
+
+    <section class="admin-section-wrap">
+        <div class="admin-container">
+            <h1>Aranceles</h1>
+
+            {% if fecha_actualizacion %}
+            <div class="admin-info-box">
+                <strong>Última actualización:</strong> {{ fecha_actualizacion }}
+            </div>
+            {% endif %}
+
+            {% if (current_user == 'Gaito' or current_user == '3' or current_user == 'DanielABNECH') and modificaciones_programadas %}
+            <div class="admin-info-box" style="background: #fef3c7; border-color: #f59e0b; color: #92400e;">
+                <strong>Modificaciones por aplicar:</strong> hay {{ modificaciones_programadas|length }} cambio(s) programado(s) que se aplicarán en su fecha. <a href="{{ url_for('admin_obras') }}">Ver en Gestión de obras</a>
+            </div>
+            {% endif %}
+
+            <div class="admin-stats">
+                <div class="admin-stat">
+                    <h3>Total obras</h3>
+                    <p class="value">{{ estado_data.total_obras or 0 }}</p>
+                </div>
+                <div class="admin-stat vigentes">
+                    <h3>Vigentes</h3>
+                    <p class="value">{{ estado_data.obras_vigentes or 0 }}</p>
+                </div>
+                <div class="admin-stat cortadas">
+                    <h3>Sin convenio</h3>
+                    <p class="value">{{ estado_data.obras_sin_convenio or 0 }}</p>
+                </div>
+                <div class="admin-stat cortadas">
+                    <h3>Suspendidas</h3>
+                    <p class="value">{{ estado_data.obras_suspendidas or 0 }}</p>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h2>Listado de obras</h2>
+                <p class="admin-card-desc">Filtra por estado o busca por nombre.</p>
+                <div class="admin-filters">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <label for="filter-estado">Estado</label>
+                        <select id="filter-estado" onchange="filterTable()">
+                            <option value="all">Todas</option>
+                            <option value="vigente">Solo vigentes</option>
+                            <option value="sin_convenio">Sin convenio</option>
+                            <option value="suspendida">Suspendidas</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <label for="search-nombre">Buscar</label>
+                        <input type="text" id="search-nombre" placeholder="Nombre de obra..." onkeyup="filterTable()">
+                    </div>
+                </div>
+
+                {% if obras_list %}
+                <div class="admin-table-wrap">
+                    <table class="admin-table" id="obras-table">
+                        <thead>
+                            <tr>
+                                <th>Obra social</th>
+                                <th>Precio (UB)</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for obra in obras_list %}
+                            <tr data-estado="{{ obra.estado }}" data-nombre="{{ obra.nombre.lower() }}">
+                                <td><strong>{{ obra.nombre }}</strong></td>
+                                <td>
+                                    {% if obra.estado == 'sin_convenio' %}
+                                        <span class="admin-muted">—</span>
+                                    {% elif obra.precio and obra.precio != 'None' and obra.precio != 'N/A' %}
+                                        ${{ obra.precio }}
+                                    {% else %}
+                                        <span class="admin-muted">Sin precio</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if obra.estado == 'vigente' %}
+                                        <span class="admin-badge admin-badge-vigente">Vigente</span>
+                                    {% elif obra.estado == 'sin_convenio' %}
+                                        <span class="admin-badge admin-badge-sin-convenio">Sin convenio</span>
+                                    {% elif obra.estado == 'suspendida' %}
+                                        <span class="admin-badge admin-badge-suspendida">Suspendida</span>
+                                    {% else %}
+                                        <span class="admin-badge admin-badge-sin-convenio">Sin convenio</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="admin-no-data">
+                    <p>No hay datos de obras sociales.</p>
+                    <p style="font-size: 13px;">Sincroniza precios desde el Panel para ver el estado.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <script>
+        function filterTable() {
+            var estado = document.getElementById('filter-estado').value;
+            var busqueda = document.getElementById('search-nombre').value.toLowerCase();
+            var filas = document.querySelectorAll('#obras-table tbody tr');
+            filas.forEach(function(row) {
+                var show = (estado === 'all' || row.getAttribute('data-estado') === estado) &&
+                    (!busqueda || row.getAttribute('data-nombre').indexOf(busqueda) !== -1);
+                row.style.display = show ? '' : 'none';
+            });
+        }
+    </script>
+</body>
+</html>

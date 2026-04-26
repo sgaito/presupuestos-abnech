@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Perfil PDF — {{ username }}</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body class="admin-page">
+    <header class="admin-header">
+        <div class="admin-header-inner">
+            <div class="admin-header-user"><strong>Usuario:</strong> {{ current_user }}</div>
+            <nav class="admin-header-nav">
+                <a href="{{ url_for('presupuestos') }}" class="calc">Calculadora</a>
+                <a href="{{ url_for('aranceles') }}" class="aranceles">Aranceles</a>
+                <a href="{{ url_for('instructivo') }}" class="instructivo">Instructivo</a>
+                <a href="{{ url_for('admin_usuarios') }}" class="usuarios nav-active">Panel</a>
+                <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesión</a>
+            </nav>
+        </div>
+    </header>
+
+    <section class="admin-section-wrap">
+        <div class="admin-container">
+            <h1>Perfil PDF — {{ username }}</h1>
+            <p class="perfil-intro">Estos datos se usan para generar el encabezado y pie del presupuesto en PDF. Edita la información del laboratorio y guarda los cambios.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="admin-alert admin-alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="admin-card">
+                <form method="POST" action="{{ url_for('admin_perfil', username=username) }}" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                    <div class="perfil-form-sections">
+                        <!-- Datos del laboratorio -->
+                        <div class="perfil-section">
+                            <h2 class="perfil-section-title">Datos del laboratorio</h2>
+                            <div class="admin-form-group">
+                                <label>Nombre del laboratorio</label>
+                                <input type="text" name="nombre_lab" value="{{ perfil.get('nombre_lab', '') }}" required placeholder="Ej: Laboratorio Central">
+                            </div>
+                            <div class="admin-form-group">
+                                <label>Subtítulo</label>
+                                <input type="text" name="subtitulo" value="{{ perfil.get('subtitulo', '') }}" placeholder="Ej: Análisis clínicos y bioquímica">
+                            </div>
+                            <div class="admin-form-group">
+                                <label>Profesionales</label>
+                                <textarea name="profesionales" rows="3" placeholder="Nombres o títulos de los profesionales (uno por línea)">{{ perfil.get('profesionales', '') }}</textarea>
+                            </div>
+                        </div>
+
+                        <!-- Contacto -->
+                        <div class="perfil-section">
+                            <h2 class="perfil-section-title">Contacto</h2>
+                            <div class="perfil-form-row">
+                                <div class="admin-form-group">
+                                    <label>Dirección</label>
+                                    <input type="text" name="direccion" value="{{ perfil.get('direccion', '') }}" placeholder="Calle y número">
+                                </div>
+                                <div class="admin-form-group">
+                                    <label>Ciudad</label>
+                                    <input type="text" name="ciudad" value="{{ perfil.get('ciudad', '') }}" placeholder="Localidad">
+                                </div>
+                            </div>
+                            <div class="admin-form-group">
+                                <label>Teléfono</label>
+                                <input type="text" name="telefono" value="{{ perfil.get('telefono', '') }}" placeholder="Ej: (011) 1234-5678">
+                            </div>
+                        </div>
+
+                        <!-- Logo -->
+                        <div class="perfil-section">
+                            <h2 class="perfil-section-title">Logo</h2>
+                            <div class="perfil-file-wrap">
+                                <div class="perfil-file-input">
+                                    <div class="admin-form-group">
+                                        <label>Imagen del logo</label>
+                                        <input type="file" name="logo" accept="image/png,image/jpeg,image/jpg,image/gif">
+                                        <small>PNG, JPG o GIF. Se muestra en el encabezado del PDF.</small>
+                                    </div>
+                                </div>
+                                {% if perfil.get('logo_path') %}
+                                <div class="perfil-preview-wrap">
+                                    <p>Actual</p>
+                                    <img src="{{ url_for('static', filename='logos/' + perfil.get('logo_path', '')) }}" alt="Logo actual">
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Información bancaria -->
+                        <div class="perfil-section">
+                            <h2 class="perfil-section-title">Información bancaria</h2>
+                            <div class="admin-form-group">
+                                <label>Datos para transferencia o pago</label>
+                                <textarea name="info_bancaria" rows="5" placeholder="Banco, CBU, alias, CUIT… (una línea por dato)">{{ perfil.get('info_bancaria', '') }}</textarea>
+                                <small>Aparece en el pie del presupuesto PDF.</small>
+                            </div>
+                        </div>
+
+                        <!-- Firma -->
+                        <div class="perfil-section">
+                            <h2 class="perfil-section-title">Firma</h2>
+                            <div class="admin-form-group">
+                                <label>Texto de firma</label>
+                                <input type="text" name="firma_texto" value="{{ perfil.get('firma_texto', '') }}" placeholder="Ej: Dr. Juan Pérez">
+                            </div>
+                            <div class="perfil-file-wrap">
+                                <div class="perfil-file-input">
+                                    <div class="admin-form-group">
+                                        <label>Imagen de firma</label>
+                                        <input type="file" name="firma_imagen" accept="image/png,image/jpeg,image/jpg,image/gif">
+                                        <small>PNG o JPG. Se muestra sobre la línea de firma en el PDF.</small>
+                                    </div>
+                                </div>
+                                {% if perfil.get('firma_path') %}
+                                <div class="perfil-preview-wrap">
+                                    <p>Actual</p>
+                                    <img src="{{ url_for('static', filename='logos/' + perfil.get('firma_path', '')) }}" alt="Firma actual">
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="perfil-actions">
+                        <button type="submit" class="admin-btn admin-btn-primary">Guardar perfil</button>
+                        <a href="{{ url_for('admin_usuarios') }}" class="admin-btn admin-btn-secondary">Volver al panel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+</body>
+</html>

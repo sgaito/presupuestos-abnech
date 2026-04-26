@@ -1,0 +1,11 @@
+2026-02-21 23:47:54 Login
+2026-02-21 23:47:54 Entrada: /admin/usuarios
+2026-02-21 23:47:57 Entrada: /admin/obras
+2026-02-21 23:48:27 Entrada: /admin/obras
+2026-02-21 23:48:29 Entrada: /presupuestos
+2026-02-21 23:48:37 Entrada: /admin/usuarios
+2026-02-21 23:48:38 Entrada: /admin/sync_precios/preview
+2026-02-21 23:48:47 Entrada: /admin/usuarios
+2026-02-21 23:48:49 Entrada: /admin/sync_precios/preview
+2026-02-21 23:53:06 Entrada: /admin/usuarios
+2026-02-21 23:53:45 Entrada: /admin/usuarios

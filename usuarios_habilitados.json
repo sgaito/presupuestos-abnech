@@ -1,0 +1,27 @@
+{
+  "Gaito": {
+    "password": "scrypt:32768:8:1$eQAMKntKvKb0EIsA$602d26781a456fb0043a314d1931995acd325b348b0cd1f5baa0715697bfa15d7a9b8364ae8516cc8cc5dae2f4a4035bf9ba5cf5d3ba5fdb4bca46d44b6f2a19",
+    "email": "",
+    "habilitado": true
+  },
+  "Scozzina": {
+    "password": "scrypt:32768:8:1$hVh9ImNEypX921jn$a8805bea562b0044f6244d3d89858089d2a9cd0b4c913dbedf0cebbff23f8fd6f1ece8ac1ec44ab9541ad9cdf04517bb8fb7c6d912a8801fe713944575e4cab8",
+    "email": "",
+    "habilitado": true
+  },
+  "1": {
+    "password": "scrypt:32768:8:1$q9h0vEbqu9lWwz2h$c54bdbe63ce648ec176ac66c0eec2447cd763eda150e575c20f0fdd60d0e80eadcaf9bcba3e0cf29034d28039d881f0ea03fdd14cc78c81c43f72840f39b02b7",
+    "email": "",
+    "habilitado": true
+  },
+  "3": {
+    "password": "scrypt:32768:8:1$nOQUfjsWBTAxhefk$f4140499da6e69fc2352f7bf5d5e9b28801f0081d5b8a7d3d11b2e4e64df78edacf782cee4c24dca8b97190c57f528e91957bfdf9b73f61210b1b9c5644421d6",
+    "email": "",
+    "habilitado": true
+  },
+  "DanielABNECH": {
+    "password": "scrypt:32768:8:1$IWRS06V6bqwy3e6a$597cbdfcc1f37990e1627d48780cb4588fd5db5423b3cf1ce57462c22d2ea0f63c80dd5c6f1aed572e12b4c1c6fb156673493957bb5a849f2b34902bee4d3836",
+    "email": "",
+    "habilitado": true
+  }
+}

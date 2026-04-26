@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gestión de obras</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body class="admin-page">
+    <header class="admin-header">
+        <div class="admin-header-inner">
+            <div class="admin-header-user"><strong>Usuario:</strong> {{ current_user }}</div>
+            <nav class="admin-header-nav">
+                <a href="{{ url_for('presupuestos') }}" class="calc">Calculadora</a>
+                <a href="{{ url_for('aranceles') }}" class="aranceles">Aranceles</a>
+                <a href="{{ url_for('instructivo') }}" class="instructivo">Instructivo</a>
+                <a href="{{ url_for('admin_usuarios') }}" class="usuarios nav-active">Panel</a>
+                <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesión</a>
+            </nav>
+        </div>
+    </header>
+
+    <section class="admin-section-wrap">
+        <div class="admin-container">
+            <h1>Gestión de obras</h1>
+            <p class="admin-card-desc">Modificá precio, estado y cobertura de anexo por obra. Los cambios se aplican al guardar.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="admin-alert admin-alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="admin-card">
+                <h2>Sincronizar precios con OneDrive</h2>
+                <p class="admin-card-desc">Actualizá los precios de obras sociales desde el archivo OneDrive del ABNECH. Se mostrará una vista previa antes de aplicar.</p>
+                <button type="button" id="btn-preview-sync" class="admin-btn admin-btn-primary">Sincronizar con OneDrive</button>
+            </div>
+
+            <div class="admin-card admin-card-programadas">
+                <div class="programadas-header">
+                    <h2>Modificaciones por aplicar</h2>
+                    <p class="admin-card-desc">Cambios programados que se aplicarán solos en la fecha indicada.</p>
+                </div>
+                {% if modificaciones_programadas %}
+                <div class="programadas-table-wrap">
+                    <table class="programadas-table">
+                        <thead>
+                            <tr>
+                                <th class="programadas-th programadas-th-fecha">FECHA DE APLICACIÓN</th>
+                                <th class="programadas-th programadas-th-obra">OBRA SOCIAL</th>
+                                <th class="programadas-th programadas-th-mod">MODIFICACIÓN</th>
+                                <th class="programadas-th programadas-th-accion">ACCIÓN</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in modificaciones_programadas %}
+                            <tr class="programadas-tr">
+                                <td class="programadas-td programadas-td-fecha">{{ p.fecha_display }}</td>
+                                <td class="programadas-td programadas-td-obra"><strong>{{ p.nombre_obra }}</strong></td>
+                                <td class="programadas-td programadas-td-mod">
+                                    {% if (p.precio or '')|string != (p.precio_actual or '')|string %}
+                                    <div class="programadas-mod-line">Precio: {% if p.precio_actual %}$ {{ p.precio_actual }}{% else %}—{% endif %} → <span class="programadas-valor-nuevo">{% if p.precio %}$ {{ p.precio }}{% else %}—{% endif %}</span></div>
+                                    {% endif %}
+                                    {% if p.cambia_estado %}
+                                    <div class="programadas-mod-line">Estado: <span class="programadas-valor-viejo">{{ p.estado_actual_label }}</span> → <span class="programadas-valor-nuevo">{{ p.estado_nuevo_label }}</span></div>
+                                    {% endif %}
+                                    {% if p.no_cubre_anexo %}<div class="programadas-mod-line programadas-mod-anexo">No cubre anexo: Sí</div>{% endif %}
+                                </td>
+                                <td class="programadas-td programadas-td-accion">
+                                    <button type="button" class="programada-cancelar btn-cancelar-programada" data-obra="{{ p.nombre_obra }}" title="Cancelar esta programación" aria-label="Eliminar"><svg class="programada-cancelar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="programadas-empty">
+                    <p class="programadas-empty-text">No hay modificaciones programadas</p>
+                    <p class="programadas-empty-hint">Los cambios que programes en Editar aparecerán acá hasta la fecha de aplicación.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="admin-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                    <h2 style="margin: 0;">Listado de obras</h2>
+                    <button type="button" id="btn-editar-obras" class="admin-btn admin-btn-primary">Editar</button>
+                </div>
+                <div class="admin-filters" style="margin-top: 12px;">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <label for="filter-estado">Estado</label>
+                        <select id="filter-estado" onchange="filterTable()">
+                            <option value="all">Todas</option>
+                            <option value="vigente">Solo vigentes</option>
+                            <option value="sin_convenio">Sin convenio</option>
+                            <option value="suspendida">Suspendidas</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <label for="search-nombre">Buscar</label>
+                        <input type="text" id="search-nombre" placeholder="Nombre de obra..." onkeyup="filterTable()">
+                    </div>
+                </div>
+
+                {% if obras_list %}
+                <div class="admin-table-wrap">
+                    <table class="admin-table" id="obras-table">
+                        <thead>
+                            <tr>
+                                <th>Obra social</th>
+                                <th>Precio (UB)</th>
+                                <th>Estado</th>
+                                <th>No cubre anexo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for obra in obras_list %}
+                            <tr data-estado="{{ obra.estado }}" data-nombre="{{ obra.nombre|lower }}" data-precio="{{ obra.precio }}" data-anexo="{{ '1' if obra.no_cubre_anexo else '0' }}">
+                                <td><strong>{{ obra.nombre }}</strong></td>
+                                <td>
+                                    {% if obra.precio %}
+                                        ${{ obra.precio }}
+                                    {% else %}
+                                        <span class="admin-muted">Sin precio</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if obra.estado == 'vigente' %}
+                                        <span class="admin-badge admin-badge-vigente">Vigente</span>
+                                    {% elif obra.estado == 'sin_convenio' %}
+                                        <span class="admin-badge admin-badge-sin-convenio">Sin convenio</span>
+                                    {% elif obra.estado == 'suspendida' %}
+                                        <span class="admin-badge admin-badge-suspendida">Suspendida</span>
+                                    {% else %}
+                                        <span class="admin-badge admin-badge-sin-convenio">Sin convenio</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ 'Sí' if obra.no_cubre_anexo else 'No' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="admin-no-data">
+                    <p>No hay datos de obras sociales.</p>
+                    <p style="font-size: 13px;">Sincronizá precios desde el Panel para ver el estado.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <div id="modal-sync-preview" class="admin-modal">
+        <div class="admin-modal-content">
+            <div class="admin-modal-header">
+                <h2>Vista previa de sincronización</h2>
+            </div>
+            <div class="admin-modal-body" id="modal-sync-body">
+                <div class="admin-loading"><p>Cargando...</p></div>
+            </div>
+            <div class="admin-modal-footer">
+                <button type="button" id="modal-cancelar-sync" class="admin-btn admin-btn-secondary">Cancelar</button>
+                <form id="form-confirm-sync" method="POST" action="{{ url_for('admin_sync_precios') }}" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" id="modal-confirmar-sync" class="admin-btn admin-btn-primary" style="display: none;">Confirmar sincronización</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-editar-obras" class="admin-modal" role="dialog" aria-labelledby="modal-editar-obras-titulo">
+        <div class="admin-modal-content admin-modal-content-wide">
+            <div class="admin-modal-header">
+                <h2 id="modal-editar-obras-titulo">Editar obras</h2>
+            </div>
+            <div class="admin-modal-body" id="modal-editar-obras-body">
+                <p class="admin-card-desc">Buscá obras sociales y cargá los nuevos valores. Luego usá <strong>Vista previa</strong> y <strong>Confirmar</strong> para aplicar todos los cambios de una vez.</p>
+                <div class="admin-form-group">
+                    <label for="modal-buscar-obra">Buscar obra social</label>
+                    <div class="autocomplete-container">
+                        <input type="text" id="modal-buscar-obra" placeholder="Escribí el nombre de la obra..." autocomplete="off">
+                        <div class="autocomplete-dropdown" id="modal-obras-dropdown"></div>
+                    </div>
+                </div>
+                <h3 style="margin: 16px 0 8px; font-size: 1em;">¿Cuándo aplicar estos cambios?</h3>
+                <div class="admin-form-group modal-cuando-bloque">
+                    <label class="modal-radio-item modal-radio-ahora">
+                        <input type="radio" name="modal-cuando-bloque" value="ahora" id="modal-cuando-ahora" checked> <span>Aplicar ahora</span>
+                    </label>
+                    <label class="modal-radio-item modal-radio-fecha">
+                        <input type="radio" name="modal-cuando-bloque" value="programar" id="modal-cuando-programar"> <span>Programar para fecha</span>
+                        <input type="date" id="modal-fecha-bloque" min="" style="padding:6px 10px; border:1px solid #cbd5e1; border-radius:4px;">
+                    </label>
+                </div>
+                <h3 style="margin: 16px 0 8px; font-size: 1em;">Cambios pendientes</h3>
+                <div class="modal-cambios-table-wrap">
+                    <table class="admin-table"><thead><tr><th>Obra</th><th>Precio</th><th>Estado</th><th>No anexo</th><th></th></tr></thead><tbody id="modal-cambios-list"></tbody></table>
+                </div>
+                <p id="modal-cambios-empty" class="admin-muted" style="margin: 8px 0;">Aún no hay cambios. Buscá y agregá obras arriba.</p>
+                <div id="modal-editar-obras-mensaje" class="admin-alert" style="display:none; margin-top:12px;"></div>
+            </div>
+            <div class="admin-modal-actions">
+                <button type="button" id="modal-editar-cerrar" class="admin-btn admin-btn-secondary">Cerrar</button>
+                <button type="button" id="modal-editar-vista-previa" class="admin-btn admin-btn-secondary">Vista previa</button>
+                <button type="button" id="modal-editar-confirmar" class="admin-btn admin-btn-primary" style="display:none;">Confirmar cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-editar-obras-preview" class="admin-modal" role="dialog">
+        <div class="admin-modal-content admin-modal-content-wide">
+            <div class="admin-modal-header">
+                <h2>Vista previa de cambios</h2>
+            </div>
+            <div class="admin-modal-body" id="modal-editar-obras-preview-body"></div>
+            <div class="admin-modal-actions">
+                <button type="button" id="modal-preview-volver" class="admin-btn admin-btn-secondary">Volver</button>
+                <button type="button" id="modal-preview-confirmar" class="admin-btn admin-btn-primary">Confirmar cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var obrasActuales = {{ obras_list | tojson }};
+        document.getElementById('btn-preview-sync').addEventListener('click', function() {
+            var modal = document.getElementById('modal-sync-preview');
+            var modalBody = document.getElementById('modal-sync-body');
+            var confirmBtn = document.getElementById('modal-confirmar-sync');
+            modal.classList.add('show');
+            modalBody.innerHTML = '<div class="admin-loading"><p>Cargando...</p></div>';
+            confirmBtn.style.display = 'none';
+            fetch('{{ url_for("admin_sync_precios_preview") }}')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        var html = '<div class="admin-preview-info"><p><strong>' + data.message + '</strong></p>';
+                        if (data.total_cambios > 0) {
+                            html += '<p style="margin-top:8px;font-size:13px;color:#64748b;">Se actualizará el archivo al confirmar.</p>';
+                        }
+                        html += '</div>';
+                        if (data.cambios && data.cambios.length > 0) {
+                            html += '<div style="max-height:360px;overflow-y:auto;"><table class="admin-preview-table"><thead><tr><th>Obra Social</th><th>Precio actual</th><th>Precio nuevo</th><th>Estado</th></tr></thead><tbody>';
+                            data.cambios.forEach(function(c) {
+                                var badge = c.cambio === 'nuevo' || c.cambio === 'a_vigente' ? 'admin-badge-ok' : (c.cambio === 'borrado' ? 'admin-badge-off' : (c.cambio === 'sin_convenio' ? 'admin-badge-warn' : (c.cambio === 'suspendida' ? 'admin-badge-info' : 'admin-badge-warn')));
+                                var badgeText = c.cambio === 'nuevo' ? 'Nueva' : (c.cambio === 'a_vigente' ? 'Vigente' : (c.cambio === 'borrado' ? 'Borrado del archivo' : (c.cambio === 'sin_convenio' ? 'Sin convenio' : (c.cambio === 'suspendida' ? 'Suspendida' : 'Modificado'))));
+                                var prev, next;
+                                if (c.cambio === 'borrado') {
+                                    prev = !c.precio_actual || c.precio_actual === 'N/A' ? '—' : (c.precio_actual === 'Suspendida' || c.precio_actual === 'Sin convenio' ? c.precio_actual : '$' + c.precio_actual);
+                                    next = '<em>No está en OneDrive</em>';
+                                } else if (c.cambio === 'suspendida' || c.cambio === 'sin_convenio') {
+                                    prev = !c.precio_actual || c.precio_actual === 'N/A' ? '—' : (c.precio_actual === 'Suspendida' || c.precio_actual === 'Sin convenio' ? c.precio_actual : '$' + c.precio_actual);
+                                    next = c.precio_nuevo && !String(c.precio_nuevo).match(/Sin Convenio|Suspendida|OneDrive/) ? ('$' + c.precio_nuevo) : '<em>' + (c.precio_nuevo || '—') + '</em>';
+                                } else {
+                                    if (!c.precio_actual) prev = '<em>Nueva</em>';
+                                    else if (c.precio_actual === 'Suspendida' || c.precio_actual === 'Sin convenio') prev = c.precio_actual;
+                                    else prev = '$' + c.precio_actual;
+                                    next = c.precio_nuevo && !String(c.precio_nuevo).match(/Sin Convenio|Suspendida|OneDrive/) ? ('$' + c.precio_nuevo) : '<em>' + (c.precio_nuevo || '—') + '</em>';
+                                }
+                                html += '<tr><td><strong>' + c.nombre + '</strong></td><td class="precio-anterior">' + prev + '</td><td class="precio-nuevo">' + next + '</td><td><span class="admin-badge ' + badge + '">' + badgeText + '</span></td></tr>';
+                            });
+                            html += '</tbody></table></div>';
+                            if (data.total_cambios > 50) {
+                                html += '<p style="margin-top:12px;font-size:13px;color:#64748b;text-align:center">... y ' + (data.total_cambios - 50) + ' más</p>';
+                            }
+                            confirmBtn.style.display = 'inline-block';
+                        } else {
+                            html += '<div class="admin-no-data"><p>No hay cambios pendientes.</p></div>';
+                        }
+                        modalBody.innerHTML = html;
+                    } else {
+                        modalBody.innerHTML = '<div class="admin-alert admin-alert-error"><strong>Error:</strong> ' + data.message + '</div>';
+                    }
+                })
+                .catch(function() {
+                    modalBody.innerHTML = '<div class="admin-alert admin-alert-error"><p>No se pudo cargar la vista previa.</p></div>';
+                });
+        });
+        document.getElementById('modal-cancelar-sync').addEventListener('click', function() {
+            document.getElementById('modal-sync-preview').classList.remove('show');
+        });
+        document.getElementById('modal-sync-preview').addEventListener('click', function(e) {
+            if (e.target === this) this.classList.remove('show');
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') document.getElementById('modal-sync-preview').classList.remove('show');
+            if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+                if (document.getElementById('modal-sync-preview').classList.contains('show'))
+                    document.getElementById('modal-sync-preview').classList.remove('show');
+            }
+        });
+
+        function filterTable() {
+            var estado = document.getElementById('filter-estado').value;
+            var busqueda = document.getElementById('search-nombre').value.toLowerCase();
+            var filas = document.querySelectorAll('#obras-table tbody tr');
+            filas.forEach(function(row) {
+                var show = (estado === 'all' || row.getAttribute('data-estado') === estado) &&
+                    (!busqueda || row.getAttribute('data-nombre').indexOf(busqueda) !== -1);
+                row.style.display = show ? '' : 'none';
+            });
+        }
+
+        (function() {
+            var cambiosPendientes = [];
+            var modalEditar = document.getElementById('modal-editar-obras');
+            var modalPreview = document.getElementById('modal-editar-obras-preview');
+            var inputBuscar = document.getElementById('modal-buscar-obra');
+            var dropdownObras = document.getElementById('modal-obras-dropdown');
+            var listCambios = document.getElementById('modal-cambios-list');
+            var emptyMsg = document.getElementById('modal-cambios-empty');
+            var mensajeDiv = document.getElementById('modal-editar-obras-mensaje');
+            var hoyStr = new Date().toISOString().slice(0, 10);
+
+            function getObraActual(nombre) {
+                for (var i = 0; i < obrasActuales.length; i++) {
+                    if (obrasActuales[i].nombre === nombre) return obrasActuales[i];
+                }
+                return { nombre: nombre, precio: '', estado: 'vigente', no_cubre_anexo: false };
+            }
+            function renderCambios() {
+                listCambios.innerHTML = '';
+                if (cambiosPendientes.length === 0) {
+                    emptyMsg.style.display = 'block';
+                    return;
+                }
+                emptyMsg.style.display = 'none';
+                cambiosPendientes.forEach(function(c, idx) {
+                    var actual = getObraActual(c.nombre_obra);
+                    var tr = document.createElement('tr');
+                    tr.className = 'modal-cambio-row';
+                    tr.innerHTML = '<td><strong>' + c.nombre_obra + '</strong></td>' +
+                        '<td><input type="text" class="cambio-precio" placeholder="Precio" value="' + (c.precio !== undefined && c.precio !== null ? c.precio : actual.precio) + '" data-idx="' + idx + '"></td>' +
+                        '<td><select class="cambio-estado" data-idx="' + idx + '">' +
+                        '<option value="vigente"' + (c.estado === 'vigente' ? ' selected' : '') + '>Vigente</option>' +
+                        '<option value="sin_convenio"' + (c.estado === 'sin_convenio' ? ' selected' : '') + '>Sin convenio</option>' +
+                        '<option value="suspendida"' + (c.estado === 'suspendida' ? ' selected' : '') + '>Suspendida</option>' +
+                        '</select></td>' +
+                        '<td><label><input type="checkbox" class="cambio-anexo" data-idx="' + idx + '"' + (c.no_cubre_anexo ? ' checked' : '') + '> No anexo</label></td>' +
+                        '<td><button type="button" class="admin-btn admin-btn-sm admin-btn-secondary btn-quitar-cambio" data-idx="' + idx + '">Quitar</button></td>';
+                    listCambios.appendChild(tr);
+                });
+                listCambios.querySelectorAll('.cambio-precio, .cambio-estado, .cambio-anexo').forEach(function(el) {
+                    el.addEventListener('change', function() { actualizarCambioFromRow(parseInt(this.getAttribute('data-idx'), 10)); });
+                });
+                listCambios.querySelectorAll('.cambio-precio').forEach(function(el) {
+                    el.addEventListener('input', function() { actualizarCambioFromRow(parseInt(this.getAttribute('data-idx'), 10)); });
+                });
+                listCambios.querySelectorAll('.btn-quitar-cambio').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var idx = parseInt(this.getAttribute('data-idx'), 10);
+                        cambiosPendientes.splice(idx, 1);
+                        renderCambios();
+                    });
+                });
+            }
+            function actualizarCambioFromRow(idx) {
+                if (!cambiosPendientes[idx]) return;
+                var rowEl = listCambios.querySelectorAll('tr')[idx];
+                if (!rowEl) return;
+                var precio = (rowEl.querySelector('.cambio-precio') || {}).value || '';
+                var estado = (rowEl.querySelector('.cambio-estado') || {}).value || 'vigente';
+                var anexo = (rowEl.querySelector('.cambio-anexo') || {}).checked || false;
+                cambiosPendientes[idx] = {
+                    nombre_obra: cambiosPendientes[idx].nombre_obra,
+                    precio: precio,
+                    estado: estado,
+                    no_cubre_anexo: anexo
+                };
+            }
+            function getFechaAplicarBloque() {
+                var programar = document.getElementById('modal-cuando-programar');
+                var fechaEl = document.getElementById('modal-fecha-bloque');
+                if (programar && programar.checked && fechaEl && fechaEl.value) return fechaEl.value;
+                return '';
+            }
+            function getCambiosParaEnviar() {
+                var fechaBloque = getFechaAplicarBloque();
+                var rows = listCambios.querySelectorAll('.modal-cambio-row');
+                var out = [];
+                rows.forEach(function(row, i) {
+                    if (!cambiosPendientes[i]) return;
+                    var nombre = cambiosPendientes[i].nombre_obra;
+                    var actual = getObraActual(nombre);
+                    var precio = (row.querySelector('.cambio-precio') || {}).value || '';
+                    var precioTrim = precio.trim();
+                    var estado = (row.querySelector('.cambio-estado') || {}).value || 'vigente';
+                    var anexo = (row.querySelector('.cambio-anexo') || {}).checked || false;
+                    var precioIgual = (precioTrim || '') === (actual.precio || '');
+                    var estadoIgual = estado === (actual.estado || 'vigente');
+                    var anexoIgual = anexo === (actual.no_cubre_anexo || false);
+                    if (precioIgual && estadoIgual && anexoIgual) return;
+                    out.push({
+                        nombre_obra: nombre,
+                        precio: precioTrim,
+                        estado: estado,
+                        no_cubre_anexo: anexo,
+                        fecha_aplicar: fechaBloque
+                    });
+                });
+                return out;
+            }
+            function buildPreviewHtml() {
+                var cambios = getCambiosParaEnviar();
+                if (cambios.length === 0) return '<div class="admin-alert admin-alert-error">No hay cambios para aplicar.</div>';
+                var fechaBloque = getFechaAplicarBloque();
+                var cuandoTexto = fechaBloque ? ('Se aplicarán el ' + fechaBloque) : 'Se aplicarán ahora';
+                var html = '<div class="admin-preview-info"><p><strong>' + cuandoTexto + '.</strong></p><p><strong>' + cambios.length + ' cambio(s).</strong></p><p style="margin-top:8px;font-size:13px;color:#64748b;">Revisá la tabla y confirmá para guardar.</p></div>';
+                html += '<div style="max-height:360px;overflow-y:auto;"><table class="admin-preview-table"><thead><tr><th>Obra social</th><th>Precio actual</th><th>Precio nuevo</th><th>Estado actual</th><th>Estado nuevo</th><th>No anexo</th></tr></thead><tbody>';
+                cambios.forEach(function(c) {
+                    var actual = getObraActual(c.nombre_obra);
+                    var prevP = actual.precio ? ('$' + actual.precio) : '—';
+                    var nextP = c.precio ? ('$' + c.precio) : '—';
+                    var prevE = actual.estado || 'vigente';
+                    var nextE = c.estado || 'vigente';
+                    var prevA = actual.no_cubre_anexo ? 'Sí' : 'No';
+                    var nextA = c.no_cubre_anexo ? 'Sí' : 'No';
+                    html += '<tr><td><strong>' + c.nombre_obra + '</strong></td><td>' + prevP + '</td><td>' + nextP + '</td><td>' + prevE + '</td><td>' + nextE + '</td><td>' + prevA + ' → ' + nextA + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+                return html;
+            }
+            document.getElementById('btn-editar-obras').addEventListener('click', function() {
+                cambiosPendientes = [];
+                renderCambios();
+                inputBuscar.value = '';
+                dropdownObras.style.display = 'none';
+                mensajeDiv.style.display = 'none';
+                document.getElementById('modal-cuando-ahora').checked = true;
+                var fechaBloque = document.getElementById('modal-fecha-bloque');
+                if (fechaBloque) { fechaBloque.value = ''; fechaBloque.setAttribute('min', hoyStr); }
+                modalEditar.classList.add('show');
+            });
+            function actualizarDropdownObras() {
+                var term = (inputBuscar.value || '').toLowerCase().trim();
+                var opts = obrasActuales.filter(function(o) {
+                    return !cambiosPendientes.some(function(c) { return c.nombre_obra === o.nombre; }) && (!term || o.nombre.toLowerCase().indexOf(term) !== -1);
+                });
+                var limit = 20;
+                dropdownObras.innerHTML = opts.slice(0, limit).map(function(o) {
+                    return '<div class="autocomplete-option" data-value="' + o.nombre.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '">' + o.nombre.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+                }).join('');
+                if (opts.length > limit) {
+                    dropdownObras.innerHTML += '<div class="autocomplete-option autocomplete-more" style="pointer-events:none; color:#64748b; font-size:12px;">Escribí para filtrar (' + opts.length + ' obras)</div>';
+                }
+                dropdownObras.style.display = opts.length ? 'block' : 'none';
+            }
+            function agregarObraALista(nombre) {
+                nombre = (nombre || '').trim();
+                if (!nombre) return false;
+                if (cambiosPendientes.some(function(c) { return c.nombre_obra === nombre; })) {
+                    inputBuscar.value = '';
+                    if (dropdownObras) dropdownObras.style.display = 'none';
+                    return false;
+                }
+                var actual = getObraActual(nombre);
+                cambiosPendientes.push({
+                    nombre_obra: nombre,
+                    precio: actual.precio || '',
+                    estado: actual.estado || 'vigente',
+                    no_cubre_anexo: actual.no_cubre_anexo || false,
+                    fecha_aplicar: ''
+                });
+                inputBuscar.value = '';
+                if (dropdownObras) dropdownObras.style.display = 'none';
+                renderCambios();
+                return true;
+            }
+            if (dropdownObras) {
+                inputBuscar.addEventListener('focus', function() {
+                    if (inputBuscar.value.trim()) actualizarDropdownObras();
+                });
+                inputBuscar.addEventListener('input', actualizarDropdownObras);
+                inputBuscar.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (dropdownObras.style.display === 'block') {
+                            var firstOpt = dropdownObras.querySelector('.autocomplete-option:not(.autocomplete-more)');
+                            if (firstOpt) {
+                                var nombre = (firstOpt.getAttribute('data-value') || firstOpt.textContent || '').trim();
+                                agregarObraALista(nombre);
+                            }
+                        }
+                    }
+                });
+                inputBuscar.addEventListener('blur', function() { setTimeout(function() { dropdownObras.style.display = 'none'; }, 200); });
+                dropdownObras.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                });
+                dropdownObras.addEventListener('click', function(e) {
+                    var opt = e.target.closest('.autocomplete-option');
+                    if (!opt || opt.classList.contains('autocomplete-more')) return;
+                    var nombre = (opt.getAttribute('data-value') || opt.textContent || '').trim();
+                    agregarObraALista(nombre);
+                });
+            }
+            document.getElementById('modal-editar-cerrar').addEventListener('click', function() { modalEditar.classList.remove('show'); });
+            modalEditar.addEventListener('click', function(e) { if (e.target === modalEditar) modalEditar.classList.remove('show'); });
+            document.getElementById('modal-editar-vista-previa').addEventListener('click', function() {
+                var cambios = getCambiosParaEnviar();
+                if (cambios.length === 0) {
+                    mensajeDiv.textContent = 'Agregá al menos una obra con cambios.';
+                    mensajeDiv.className = 'admin-alert admin-alert-error';
+                    mensajeDiv.style.display = 'block';
+                    return;
+                }
+                if (document.getElementById('modal-cuando-programar').checked && !document.getElementById('modal-fecha-bloque').value) {
+                    mensajeDiv.textContent = 'Elegí una fecha para programar los cambios.';
+                    mensajeDiv.className = 'admin-alert admin-alert-error';
+                    mensajeDiv.style.display = 'block';
+                    return;
+                }
+                mensajeDiv.style.display = 'none';
+                document.getElementById('modal-editar-obras-preview-body').innerHTML = buildPreviewHtml();
+                modalEditar.classList.remove('show');
+                modalPreview.classList.add('show');
+            });
+            document.getElementById('modal-preview-volver').addEventListener('click', function() {
+                modalPreview.classList.remove('show');
+                modalEditar.classList.add('show');
+            });
+            modalPreview.addEventListener('click', function(e) { if (e.target === modalPreview) modalPreview.classList.remove('show'); });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    modalPreview.classList.remove('show');
+                    modalEditar.classList.remove('show');
+                }
+                if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+                    if (modalPreview.classList.contains('show')) modalPreview.classList.remove('show');
+                    else if (modalEditar.classList.contains('show')) modalEditar.classList.remove('show');
+                }
+            });
+            document.getElementById('modal-preview-confirmar').addEventListener('click', function() {
+                var cambios = getCambiosParaEnviar();
+                if (cambios.length === 0) return;
+                var btn = this;
+                btn.disabled = true;
+                fetch('{{ url_for("admin_obras_actualizar_lote") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+                    body: JSON.stringify({ cambios: cambios })
+                }).then(function(r) { return r.json(); }).then(function(d) {
+                    btn.disabled = false;
+                    modalPreview.classList.remove('show');
+                    if (d.success) {
+                        location.reload();
+                    } else {
+                        alert('Error: ' + (d.message || 'No se pudo aplicar.'));
+                    }
+                }).catch(function() {
+                    btn.disabled = false;
+                    alert('Error de conexión.');
+                });
+            });
+        })();
+
+        document.querySelectorAll('.btn-cancelar-programada').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var obra = this.getAttribute('data-obra');
+                if (!confirm('¿Cancelar la modificación programada para "' + obra + '"?')) return;
+                var body = 'csrf_token={{ csrf_token() }}&nombre=' + encodeURIComponent(obra);
+                fetch('{{ url_for("admin_obras_programadas_eliminar") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: body
+                }).then(function(r) { return r.json(); }).then(function(d) {
+                    if (d.success) location.reload();
+                    else alert('Error: ' + (d.message || 'No se pudo cancelar'));
+                }).catch(function() { alert('Error de conexión'); });
+            });
+        });
+    </script>
+</body>
+</html>
